@@ -1,0 +1,49 @@
+#Import section
+import io
+import json
+from PIL import Image, ImageDraw
+from fastapi import File, FastAPI
+import torch
+import tempfile
+import os
+import ast
+import base64
+
+# Model
+model = torch.hub.load('ultralytics/yolov5', 'custom', path=r"model/dam_det.pt")
+model.conf = 0.5
+
+#create your API
+app = FastAPI()
+
+# Helper function to draw bounding boxes on the image
+def draw_boxes(image, boxes):
+    draw = ImageDraw.Draw(image)
+    for box in boxes:
+        x_min, y_min, x_max, y_max, conf, cls = box
+        draw.rectangle([x_min, y_min, x_max, y_max], outline=(255, 0, 0), width=2)
+        draw.text((x_min, y_min), f"{cls}", fill=(255, 0, 0))
+
+# Set up a temporary directory to save the image
+temp_dir = tempfile.mkdtemp()
+
+# Helper function to save the image with detections to the temporary directory
+def save_image_with_detections(image, boxes, output_path):
+    draw_boxes(image, boxes)
+    image.save(output_path, format="PNG")
+
+#Set up your API and integrate your ML model 
+@app.post("/objectdetection/")
+async def get_body(file: bytes = File(...)):
+    input_image = Image.open(io.BytesIO(file)).convert("RGB")
+    results = model(input_image)
+    results_json = json.loads(results.pandas().xyxy[0].to_json(orient="records"))
+
+    # Save the image with drawn boxes to the temporary directory
+    image_with_detections_path = os.path.join(temp_dir, "image_with_detections.png")
+    save_image_with_detections(input_image, results.pred[0].detach().cpu().numpy(), image_with_detections_path)
+
+    # Convert the image path to a URL (you can use a public URL if you have one)
+    image_url = f"/objectdetection/image_with_detections.png"  # You can change the URL structure as needed
+
+    return {"result": results_json, "image_with_detections_url": image_url}
