@@ -16,7 +16,7 @@ i = 0
 previous_folder_name = ""
 
 # Model
-model = torch.hub.load('ultralytics/yolov5', 'custom', path=r"model/dam_det.pt")
+model = torch.hub.load('ultralytics/yolov5', 'custom', path=r"dam_det.pt")
 model.conf = 0.5
 
 # Create your API
