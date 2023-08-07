@@ -8,6 +8,7 @@ import torch
 import tempfile
 import os
 import time
+import requests
 
 #C:\Users\Hamza\Downloads\unnamed.jpg
 
@@ -16,7 +17,7 @@ i = 0
 previous_folder_name = ""
 
 # Model
-model = torch.hub.load('ultralytics/yolov5', 'custom', path=r"dam_det.pt")
+model = torch.hub.load('ultralytics/yolov5', 'custom', path=r"model/dam_det.pt")
 model.conf = 0.5
 
 # Create your API
@@ -31,7 +32,7 @@ def draw_boxes_with_thicker_lines(image, boxes, line_width=10):
         draw.rectangle([x_min, y_min, x_max, y_max], outline=(255, 0, 0), width=line_width)
         draw.text((x_min, y_min), f"{cls} - {conf:.2f}", fill=(255, 0, 0))
 
-
+   
 # Set up a temporary directory to save the image
 temp_dir = tempfile.mkdtemp()
 
@@ -42,6 +43,30 @@ def save_image_with_detections(image, boxes, output_path):
     image.save(output_path, format="PNG")
 
 
+# Define the mapping function for 'class' to 'Pièce'
+def map_class_to_piece(class_value):
+    pieces = {
+        0: 'Dommage au pare-brise avant',
+        1: 'Dommage aux phares',
+        2: "Grosse bosse à l'arrière du pare-chocs",
+        3: 'Dommage au pare-brise arrière',
+        4: 'Bosse sur le marchepied',
+        5: 'Dommage au rétroviseur',
+        6: 'Dommage aux feux de signalisation',
+        7: 'Dommage aux feux arrière',
+        8: 'Bosse sur le capot',
+        9: 'Bosse sur la porte extérieure',
+        10: "Bosse sur l'aile",
+        11: 'Bosse sur le pare-chocs avant',
+        12: 'Bosse sur le panneau de carrosserie moyen',
+        13: "Bosse sur le pilier",
+        14: "Bosse sur l'aile",
+        15: 'Bosse sur le pare-chocs arrière',
+        16: 'Bosse sur le toit'
+    }
+    return pieces.get(class_value, 'Unknown')
+
+
 # Set up your API and integrate your ML model
 @app.post("/objectdetection/")
 async def get_body(folder_name: str, image_path_or_link: str = Form(...)):
@@ -50,7 +75,6 @@ async def get_body(folder_name: str, image_path_or_link: str = Form(...)):
     # Load the image from the provided image_path_or_link (whether it's a local path or a URL)
     if image_path_or_link.startswith(("http://", "https://")):
         # If it's a URL, download the image from the URL
-        import requests
         response = requests.get(image_path_or_link)
         input_image = Image.open(io.BytesIO(response.content)).convert("RGB")
     else:
@@ -59,6 +83,11 @@ async def get_body(folder_name: str, image_path_or_link: str = Form(...)):
 
     results = model(input_image)
     results_json = json.loads(results.pandas().xyxy[0].to_json(orient="records"))
+
+    # Map 'class' to 'Pièce' descriptions
+    for result in results_json:
+        class_value = result["class"]
+        result["Pièce"] = map_class_to_piece(class_value)
 
     # Save the image with drawn boxes to the temporary directory
     timestamp = int(time.time())  # Get the current timestamp
@@ -73,6 +102,6 @@ async def get_body(folder_name: str, image_path_or_link: str = Form(...)):
     os.rename(image_with_detections_path, public_image_path)
 
     # Generate the URL for the image
-    image_url = f"http://your_server/images/{folder_name}_detection_{timestamp}.png"
+    image_url = f"C:\\Users\\Hamza\\OneDrive\\Images\\f/{folder_name}_detection_{timestamp}.png"
 
     return {"result": results_json, "image_with_detections_url": image_url}
